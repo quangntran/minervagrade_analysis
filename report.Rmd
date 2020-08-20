@@ -20,21 +20,12 @@ format(Sys.time(), "%a %b %d %Y")
 #### LO evolution
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
 hw_grid(
-    # scores_data_chart_student1,
-    # scores_data_chart_student2,
-    # scores_data_chart_student3,
-    # scores_data_chart_student4,
-    # scores_data_chart_student5,
-    # scores_data_chart_student6,
-    # scores_data_chart_student7,
-    # scores_data_chart_student8,
-    # scores_data_chart_student9,
-    # scores_data_chart_student10,
-    # scores_data_chart_student11,
   list_LO_evolution_student,
     ncol = 2
 )
 ```
+
+
 
 #### Section 
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
@@ -46,39 +37,24 @@ scores_data_chart
 
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
 hw_grid(
-    # scores_data_chart_student1,
-    # scores_data_chart_student2,
-    # scores_data_chart_student3,
-    # scores_data_chart_student4,
-    # scores_data_chart_student5,
-    # scores_data_chart_student6,
-    # scores_data_chart_student7,
-    # scores_data_chart_student8,
-    # scores_data_chart_student9,
-    # scores_data_chart_student10,
-    # scores_data_chart_student11,
   list_scores_data_chart_student,
     ncol = 2
 )
 
 ```
 
+#### LO average score by student
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+hw_grid(
+  list_LO_score_student,
+    ncol = 2
+)
+```
 
 #### CO grades by student
 
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
 hw_grid(
-# scores_data_chart_student1_CO,
-# scores_data_chart_student2_CO,
-# scores_data_chart_student3_CO,  
-# scores_data_chart_student4_CO,
-# scores_data_chart_student5_CO,
-# scores_data_chart_student6_CO,
-# scores_data_chart_student7_CO, 
-# scores_data_chart_student8_CO, 
-# scores_data_chart_student9_CO,
-# scores_data_chart_student10_CO, 
-# scores_data_chart_student11_CO, 
   list_scores_data_chart_student_CO, 
     ncol = 2
 )

@@ -72,91 +72,88 @@ data <- mutate(data,
 ################################################################
 ################################################################
 
-################################################################
-########################TO DO###################################
-############# THIS IS FOR LO mcmodeling ########################
+
 ### TEST
-list_of_students <- unique(data$Student_Name)
-data <- data[!is.na(data$LO), ]
-my_data <- data[data$Student_Name == 'Student_1',]
-plotting_LO_evolution <- function(my_data, student_name) {
-my_data <- my_data[!is.na(my_data$LO), ]
-my_data$Student_Name <- factor(my_data$Student_Name)
-split_date_func <- function(df) {
-  df <- mutate(df, Updated_Date=as.POSIXct(Updated_Date, format = "%Y-%m-%d %H:%M:%S+00:00"))
-  # change to datetime
-  #mcmodeling_data <- mutate(mcmodeling_data, Updated_Date=as.POSIXct(Updated_Date, format = "%Y-%m-%d %H:%M:%S+00:00"))
-  # Group by date, then take the sum of the weighted score       #
-  # (sum_weighted), and the sum of the weights (tot_weights)     #
-  mcmodeling_data <- ddply(df %>% arrange(Updated_Date), .(Updated_Date), summarise, 
-                           sum_weighted = sum(weighted_score), 
-                           tot_weights = sum(weight))
-  
-  ################################################################
-  ################################################################
-  
-  ###### By this point we have a dataframe with:
-  # * date
-  # * total weighted scores
-  # * total weights
-  # What we want to do is taking the running average up to a certain date
-  # For date #2, it equals: 
-  # (total weighted scores of date 1 + total weighted scores of date 2)/(total weights of date1 + total weights of date 2)
-  
-  ## Idea: we can create 
-  # * a new column (column_a) that is the cumsum of the vector column total weights
-  # * a new column (column_b) that is the cumsum of the total weighted scores
-  # * the quantity of interest would be column_b/column_a
-  column_a <- cumsum(mcmodeling_data$tot_weights)
-  column_b <- cumsum(mcmodeling_data$sum_weighted)
-  mcmodeling_data$running_avg <- column_b/column_a
-  return(mcmodeling_data)
+
+calculate_LO_avg <- function(my_data) {
+  # given a data for a specific Student, get the average LO over time
+  split_date_func <- function(df) {
+    # truncate the Updated Date column so that it contains only the date information
+    df <- mutate(df, Updated_Date=substring(Updated_Date, 1,10))
+    df <- mutate(df, Updated_Date=as.POSIXct(Updated_Date, format = "%Y-%m-%d"))
+    mcmodeling_data <- ddply(df %>% arrange(Updated_Date), .(Updated_Date), summarise, 
+                             sum_weighted = sum(weighted_score), 
+                             tot_weights = sum(weight))
+    
+    ###### By this point we have a dataframe with:
+    # * date
+    # * total weighted scores
+    # * total weights
+    # What we want to do is taking the running average up to a certain date
+    # For date #2, it equals: 
+    # (total weighted scores of date 1 + total weighted scores of date 2)/(total weights of date1 + total weights of date 2)
+    
+    ## Idea: we can create 
+    # * a new column (column_a) that is the cumsum of the vector column total weights
+    # * a new column (column_b) that is the cumsum of the total weighted scores
+    # * the quantity of interest would be column_b/column_a
+    column_a <- cumsum(mcmodeling_data$tot_weights)
+    column_b <- cumsum(mcmodeling_data$sum_weighted)
+    mcmodeling_data$running_avg <- column_b/column_a
+    return(mcmodeling_data)
+  }
+  data_with_avg_LO <- ddply(my_data, .(LO), split_date_func)
+  return(data_with_avg_LO)
 }
 
-mcmodeling_data <- ddply(my_data, .(LO), split_date_func)
-# plot 
-# mcmodeling_LO_chart <- mcmodeling_data %>%
-#    hchart(
-#      "line",
-#      hcaes(x = datetime_to_timestamp(Updated_Date), y = running_avg, group=LO)
-#    )
-mcmodeling_LO_chart <- highchart() %>%
-  hc_add_series(
-    data = mcmodeling_data%>%
-      arrange(Updated_Date),
-    type = 'line',
-    hcaes(
-      x = datetime_to_timestamp(Updated_Date),
-      y = running_avg,
-      group = LO
-    ),
-    #name = "Average LO score",
-    # name is what will show up when hovering the mouse over the plot
-    # color = viridis_pal(alpha = 0.5)(8)[1:n_weeks],
-    point_Width = 20
-  ) %>%
-  hc_xAxis(title = list(text = "Time"),
-           # labels = list(format = '{value:%b %d}'),
-           # allowDecimals = FALSE,
-           # visible = TRUE
-           type = 'line'
-           # opposite = TRUE
-  ) %>%
-  hc_yAxis( max = 5, min=1,
-            allowDecimals = FALSE,
-            visible = TRUE
-  ) %>%
-  hc_tooltip(
-    # hc_tooltip: Options for the tooltip that appears when the user hovers over a series or point.
-  ) %>%
-  hc_title(
-    text = 'Evolution of Average LO score'
-  ) %>% hc_subtitle(
-    text = paste0('for ', student_name)
-  )
-#%>%
- # hc_legend(enabled = F)
+plotting_LO_evolution <- function(my_data, student_name) {
+  display_LOs <- c('networkanalysis', 'networkmodeling')
+  visible_data <- filter(my_data, LO %in% display_LOs)
+  invisible_data <- filter(my_data, ! LO %in% display_LOs)
+ 
+  mcmodeling_LO_chart <- highchart() %>%
+    hc_add_series(
+      data = visible_data%>%
+        arrange(Updated_Date),
+      type = 'line',
+      hcaes(
+        x = datetime_to_timestamp(Updated_Date),
+        y = running_avg,
+        group = LO
+      ),
+      visible=TRUE,
+      point_Width = 10
+    ) %>%
+    hc_add_series(
+      data = invisible_data%>%
+        arrange(Updated_Date),
+      type = 'line',
+      hcaes(
+        x = datetime_to_timestamp(Updated_Date),
+        y = running_avg,
+        group = LO
+      ),
+      visible=FALSE,
+      point_Width = 20
+    ) %>%
+    
+    hc_xAxis(title = list(text = "Time"),
+             type = 'datetime'
+    ) %>%
+    hc_yAxis( max = 5, min=1,
+              allowDecimals = FALSE,
+              visible = TRUE
+    ) %>%
+    hc_tooltip(
+      # hc_tooltip: Options for the tooltip that appears when the user hovers over a series or point.
+    ) %>%
+    hc_title(
+      text = 'Evolution of Average LO score'
+    ) %>% hc_subtitle(
+      text = paste0('for ', student_name)
+    )
 }
+
 list_of_students <- unique(data$Student_Name)
 num_students <- length(list_of_students)
 list_LO_evolution_student = list()
@@ -167,108 +164,90 @@ for (i in 1:num_students) {
   
   my_data <- my_data[!is.na(my_data$LO), ]
   my_data$Student_Name <- factor(my_data$Student_Name)
-  dim(my_data)
+  my_data <- calculate_LO_avg(my_data)
   name_string <- paste('scores_data_chart_student', toString(i), sep="")
   list_LO_evolution_student[[name_string]] <- plotting_LO_evolution(my_data, student_name)
-  # 
-  # n_LOs <- length(unique(my_data$LO))
-  # 
-  # n_COs <- length(unique(my_data$Course_Objective))
-  # 
-  # 
-  # my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-  #                     average_grade = mean(Score))
-  # my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-  #                     average_grade = mean(Score))
-  # name_string <- paste('scores_data_chart_student', toString(i), sep="")
-  # list_scores_data_chart_student[[name_string]]<- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-  # list_scores_data_chart_student_CO[[name_string]] <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
 }
 
-
-
-#### END TEST
-# # df that contains only mcmodeling LO
-# mcmodeling_data <- data[!is.na(data$LO), ]
-# mcmodeling_data <- mcmodeling_data[mcmodeling_data$LO == 'mcmodeling',]
-# # change to datetime
-# #mcmodeling_data <- mutate(mcmodeling_data, Updated_Date=as.POSIXct(Updated_Date, format = "%Y-%m-%d %H:%M:%S+00:00"))
-# # Group by date, then take the sum of the weighted score       #
-# # (sum_weighted), and the sum of the weights (tot_weights)     #
-# mcmodeling_data <- ddply(mcmodeling_data %>% arrange(Updated_Date), .(Updated_Date), summarise, 
-#                          sum_weighted = sum(weighted_score), 
-#                          tot_weights = sum(weight))
-# 
-# ################################################################
-# ################################################################
-# 
-# ###### By this point we have a dataframe with:
-# # * date
-# # * total weighted scores
-# # * total weights
-# # What we want to do is taking the running average up to a certain date
-# # For date #2, it equals: 
-# # (total weighted scores of date 1 + total weighted scores of date 2)/(total weights of date1 + total weights of date 2)
-# 
-# ## Idea: we can create 
-# # * a new column (column_a) that is the cumsum of the vector column total weights
-# # * a new column (column_b) that is the cumsum of the total weighted scores
-# # * the quantity of interest would be column_b/column_a
-# column_a <- cumsum(mcmodeling_data$tot_weights)
-# column_b <- cumsum(mcmodeling_data$sum_weighted)
-# mcmodeling_data$running_avg <- column_b/column_a
-# 
-# ##########################TODO##########################
-# # Plot                                                 #
-# # mcmodeling_LO_chart <- mcmodeling_data %>%
-# #   hchart(
-# #     "line", 
-# #     hcaes(x = Updated_Date, y = running_avg)
-# #   )
-# 
-# # mcmodeling_LO_chart <- highchart(type='stock') %>%
-# #   hc_add_series(
-# #     data = mcmodeling_data,
-# #     type='line',
-# #     hcaes(
-# #       x = Updated_Date,
-# #       y = running_avg
-# #     ))
-# 
-# 
-# mcmodeling_LO_chart <- highchart() %>%
+## FOR LO BAR CHART FOR EACH STUDENT
+list_of_students <- unique(data$Student_Name)
+num_students <- length(list_of_students)
+list_LO_score_student = list()
+# list_scores_data_chart_student_CO = list()
+plotting_LO_avg <- function(data, student_name){
+  
+  # display_LOs <- c('networkanalysis', 'networkmodeling')
+  # visible_data <- filter(my_data, LO %in% display_LOs)
+  # invisible_data <- filter(my_data, ! LO %in% display_LOs)
+  data <- data %>%
+    arrange(LO)
+  # chart <- data %>%
+  #   hchart('column', hcaes(x='LO', y='running_avg'))
+  chart <- highchart() %>%
+  hc_add_series(
+    data = data,
+    type = 'column',
+    hcaes(
+      x = 'LO',
+      y = 'running_avg'
+    ),
+    name = 'Average score',
+    visible=TRUE
+  ) %>%
+    hc_xAxis(title = list(text = "LO"),
+             type = 'category'
+    ) %>%
+    hc_legend(enabled = F)
+    # hc_yAxis( max = 5, min=1,
+    #           allowDecimals = FALSE,
+    #           visible = TRUE
+    # ) %>%
+    # hc_tooltip(
+    #   # hc_tooltip: Options for the tooltip that appears when the user hovers over a series or point.
+    # ) %>%
+    # hc_title(
+    #   text = 'Average LO score'
+    # ) %>% hc_subtitle(
+    #   text = paste0('for ', student_name)
+    # )
+}
+######
+# student_name <- 'Student_1'
+# my_data <- data[data$Student_Name == student_name,]
+# my_data <- my_data[!is.na(my_data$LO), ]
+# my_data$Student_Name <- factor(my_data$Student_Name)
+# my_data <- calculate_LO_avg(my_data)
+# my_data <- my_data %>%
+#   group_by(LO) %>%
+#   arrange(Updated_Date) %>%
+#   filter(row_number()==n())
+# rere <- highchart() %>%
+#   hc_chart(type='column') %>%
 #   hc_add_series(
-#     data = mcmodeling_data%>%
-#       arrange(Updated_Date),
-#     type = 'line',
+#     data = my_data,
 #     hcaes(
-#       x = Updated_Date,
-#       y = running_avg
-#     ),
-#     name = "Average LO score",
-#     # name is what will show up when hovering the mouse over the plot
-#     # color = viridis_pal(alpha = 0.5)(8)[1:n_weeks],
-#     point_Width = 20
-#   ) %>%
-#   hc_xAxis(title = list(text = "Time"),
-#            # labels = list(format = '{value:%b %d}'),
-#            # allowDecimals = FALSE,
-#            # visible = TRUE
-#            type = 'line'
-#            # opposite = TRUE
-#   ) %>%
-#   hc_yAxis( max = 5, min=2,
-#             allowDecimals = FALSE,
-#             visible = TRUE
-#   ) %>%
-#   hc_tooltip(
-#     # hc_tooltip: Options for the tooltip that appears when the user hovers over a series or point.
-#   ) %>%
-#   hc_title(
-#     text = 'Evolution of Average LO score'
-#   ) %>%
-#   hc_legend(enabled = F)
-########################################################
+#       x = 'LO',
+#       y = 'running_avg'
+#     ))
+#   
+# my_data %>%
+#   hchart('column', hcaes(x='LO', y='running_avg'))
+######
+for (i in 1:num_students) {
+  student_name = list_of_students[i]
+  my_data <- data[data$Student_Name == student_name,]
+  
+  my_data <- my_data[!is.na(my_data$LO), ]
+  my_data$Student_Name <- factor(my_data$Student_Name)
+  my_data <- calculate_LO_avg(my_data)
+  my_data <- my_data %>%
+                  group_by(LO) %>%
+                  arrange(Updated_Date) %>%
+                  filter(row_number()==n())
+
+  name_string <- paste('scores_data_chart_student', toString(i), sep="")
+  list_LO_score_student[[name_string]] <- plotting_LO_avg(my_data, student_name)
+}
 
 ## quantitative - by week
 ### filtering the data this way, only in-class grades are included
@@ -385,6 +364,7 @@ plotting_scores <- function(df, student_name,number_of_LOs,
     hc_legend(enabled = F)
   #return(scores_data_chart)
 }
+
 num_students <- length(list_of_students)
 list_scores_data_chart_student = list()
 list_scores_data_chart_student_CO = list()
