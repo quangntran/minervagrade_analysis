@@ -1,3 +1,4 @@
 # Project specific files to ignore
 sample_data_for_reporting.csv
+report.html
 *.csv
