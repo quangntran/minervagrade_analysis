@@ -17,6 +17,22 @@ format(Sys.time(), "%a %b %d %Y")
 ```
 
 ### CS166 - Ribeiro  {.tabset}
+#### LO average score by student
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+hw_grid(
+  list_LO_score_student,
+    ncol = 2
+)
+```
+
+#### CO average score by student
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+hw_grid(
+  list_CO_score_student,
+    ncol = 2
+)
+```
+
 #### LO evolution
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
 hw_grid(
@@ -41,14 +57,6 @@ hw_grid(
     ncol = 2
 )
 
-```
-
-#### LO average score by student
-```{r, echo = FALSE, warning = FALSE, message = FALSE}
-hw_grid(
-  list_LO_score_student,
-    ncol = 2
-)
 ```
 
 #### CO grades by student
