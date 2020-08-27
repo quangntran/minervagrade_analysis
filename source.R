@@ -77,34 +77,37 @@ data <- mutate(data,
 
 
 ### TEST
+data <- data[!is.na(data$LO), ]
+
+
+split_date_func <- function(df) {
+  # truncate the Updated Date column so that it contains only the date information
+  df <- mutate(df, Updated_Date=substring(Updated_Date, 1,10))
+  df <- mutate(df, Updated_Date=as.POSIXct(Updated_Date, format = "%Y-%m-%d"))
+  mcmodeling_data <- ddply(df %>% arrange(Updated_Date), .(Updated_Date), summarise, 
+                           sum_weighted = sum(weighted_score), 
+                           tot_weights = sum(weight))
+  
+  ###### By this point we have a dataframe with:
+  # * date
+  # * total weighted scores
+  # * total weights
+  # What we want to do is taking the running average up to a certain date
+  # For date #2, it equals: 
+  # (total weighted scores of date 1 + total weighted scores of date 2)/(total weights of date1 + total weights of date 2)
+  
+  ## Idea: we can create 
+  # * a new column (column_a) that is the cumsum of the vector column total weights
+  # * a new column (column_b) that is the cumsum of the total weighted scores
+  # * the quantity of interest would be column_b/column_a
+  mcmodeling_data$cum_tot_weights <- cumsum(mcmodeling_data$tot_weights)
+  mcmodeling_data$cum_sum_weighted <- cumsum(mcmodeling_data$sum_weighted)
+  mcmodeling_data$running_avg <- mcmodeling_data$cum_sum_weighted/mcmodeling_data$cum_tot_weights
+  return(mcmodeling_data)
+}
 
 calculate_LO_avg <- function(my_data, col_name_to_group_by) {
   # given a data for a specific Student, get the average LO over time
-  split_date_func <- function(df) {
-    # truncate the Updated Date column so that it contains only the date information
-    df <- mutate(df, Updated_Date=substring(Updated_Date, 1,10))
-    df <- mutate(df, Updated_Date=as.POSIXct(Updated_Date, format = "%Y-%m-%d"))
-    mcmodeling_data <- ddply(df %>% arrange(Updated_Date), .(Updated_Date), summarise, 
-                             sum_weighted = sum(weighted_score), 
-                             tot_weights = sum(weight))
-    
-    ###### By this point we have a dataframe with:
-    # * date
-    # * total weighted scores
-    # * total weights
-    # What we want to do is taking the running average up to a certain date
-    # For date #2, it equals: 
-    # (total weighted scores of date 1 + total weighted scores of date 2)/(total weights of date1 + total weights of date 2)
-    
-    ## Idea: we can create 
-    # * a new column (column_a) that is the cumsum of the vector column total weights
-    # * a new column (column_b) that is the cumsum of the total weighted scores
-    # * the quantity of interest would be column_b/column_a
-    column_a <- cumsum(mcmodeling_data$tot_weights)
-    column_b <- cumsum(mcmodeling_data$sum_weighted)
-    mcmodeling_data$running_avg <- column_b/column_a
-    return(mcmodeling_data)
-  }
   data_with_avg_LO <- ddply(my_data, c(col_name_to_group_by), split_date_func)
   if (col_name_to_group_by != 'CO'){
     data_with_avg_LO$CO <- mapvalues(data_with_avg_LO$LO, c("mcanalysis", "mcmodeling", "interpretresults", "professionalism", "pythonimplementation","caanalysis", "camodeling", "networkanalysis","networkmodeling" ),
@@ -149,7 +152,7 @@ plotting_LO_evolution <- function(my_data, student_name) {
     hc_xAxis(title = list(text = "Time"),
              type = 'datetime'
     ) %>%
-    hc_yAxis( max = 5, min=1,
+    hc_yAxis( max = 5, min=0,
               allowDecimals = FALSE,
               visible = TRUE
     ) %>%
@@ -192,7 +195,8 @@ compute_course_avg <- function(data){
     filter(row_number()==n())
   return(mean(data[['running_avg']]))
 }
-plotting_LO_avg <- function(data, student_name, col_name, course_avg){
+
+plotting_LO_avg <- function(data, student_name, col_name, plot_title, course_avg=-1, y_col='running_avg', min_y=0, max_y=5){
 
   # display_LOs <- c('networkanalysis', 'networkmodeling')
   # visible_data <- filter(my_data, LO %in% display_LOs)
@@ -213,6 +217,7 @@ plotting_LO_avg <- function(data, student_name, col_name, course_avg){
   #   hc_colors(c("#0073C2FF", "#EFC000FF","#0073C2FF", "#EFC000FF",
   #               "#0073C2FF", "#EFC000FF","#0073C2FF", "#EFC000FF"))
   #### yet another test
+  if (y_col=='running_avg'){
   data <- data %>%
     mutate(color = case_when(0 < running_avg  & running_avg< 2 ~ '#EC3A1E',
                              2 <= running_avg & running_avg< 3 ~ '#ECAC0D',
@@ -220,7 +225,11 @@ plotting_LO_avg <- function(data, student_name, col_name, course_avg){
                              4 <= running_avg & running_avg< 5 ~ '#227CD6',
                              5 <= running_avg & running_avg< 6 ~ '#430CCD'
            ))
-
+  }
+  else {
+    data$color <- 'grey'
+  }
+  # data$color <- '#EC3A1E'
   # data$color <- rep(NA, nrow(data))
   # print(data[data$running_avg < 6,])
   # data[data$running_avg < 6,][, 'color'] <- 'a'
@@ -230,29 +239,42 @@ plotting_LO_avg <- function(data, student_name, col_name, course_avg){
   # data[data$running_avg < 3, ][, 'color'] <- 'orange'
   # data[data$running_avg < 2, ][, 'color'] <- 'red'
   
-  data$y <- data$running_avg
+  data$y <- data[[y_col]]
   data$course_avg <- course_avg
   data$col_name <- data[[col_name]]
-  highchart() %>%
+  chart <- highchart()
+  if (course_avg >0){
+    chart <- chart %>% 
+      hc_add_series(data=data$course_avg, type='line', name='Course average',
+                    marker = list(
+                      lineWidth = 1,
+                      radius=0,
+                      lineColor = "black"
+                    ),
+                    color= "black",
+                    zIndex=10) 
+      # hc_plotOptions(
+      #   line = list(                   # put line here instead of area 
+      #     lineColor = "black",
+      #     lineWidth = 3,
+      #     marker = list(
+      #       lineWidth = 1,
+      #       radius=0,
+      #       lineColor = "black"
+      #     ),
+      #     zIndex=10
+      #   )
+      # ) 
+      # hc_legend(enabled=T) 
+  }
+  chart <- chart %>%
     hc_chart(type = 'bar', polar = FALSE) %>%
     hc_xAxis(categories = data[[col_name]]) %>% 
     hc_add_series(data=data,
                  name='Average score',
                  showInLegend=FALSE) %>%
     # hc_add_series(x3,color='red', dashStyle="DashDot") %>%
-    hc_add_series(data=data$course_avg, type='line', name='Course average') %>%
-    hc_plotOptions(
-      line = list(                   # put line here instead of area 
-        lineColor = "black",
-        lineWidth = 3,
-        marker = list(
-          lineWidth = 1,
-          radius=0,
-          lineColor = "black"
-        ),
-        zIndex=10
-      )
-    ) %>%
+    
     
     # hc_yAxis_multiples(
     #   list( max=5, min=0, plotLines=list(list(
@@ -265,25 +287,28 @@ plotting_LO_avg <- function(data, student_name, col_name, course_avg){
     #                  style=list( color = 'black', fontWeight = 'bold' ))
     #   )))
     # ) %>%
-    hc_legend(enabled=T) %>%
+    # hc_legend(enabled=T) %>%
     hc_tooltip(
       # headerFormat = "",
       # pointFormat=paste('Course average: ', course_avg),
-      formatter= JS("function () { 
+      formatter= JS("function () {
                     if (this.series.name == 'Average score'){
                         return this.point.col_name.concat(': ',parseFloat(this.point.y).toFixed(2));
                     } else{
                     return this.series.name.concat(': ',parseFloat(this.point.y).toFixed(2));}}")
     ) %>%
     hc_title(
-      text = paste('Average', col_name, 'score')
+      text = plot_title 
     ) %>% hc_subtitle(
       text = paste0('for ', student_name)
-    )
-    # hc_yAxis(max = 5, min=0,
-    #            allowDecimals = FALSE,
-    #            visible=TRUE
-    # ) 
+    ) %>%
+    hc_yAxis(max = max_y, min=min_y,
+               allowDecimals = FALSE,
+               visible=TRUE
+    ) %>%
+    hc_legend(enabled=T) 
+  
+  
   ####
   #####
   ######### THIS WORKS #########
@@ -384,6 +409,7 @@ plotting_LO_avg <- function(data, student_name, col_name, course_avg){
 # my_data %>%
 #   hchart('column', hcaes(x='LO', y='running_avg'))
 ######
+whole_class_LO_data <- data.frame()
 for (i in 1:num_students) {
   student_name = list_of_students[i]
   my_data <- data[data$Student_Name == student_name,]
@@ -397,17 +423,52 @@ for (i in 1:num_students) {
                   arrange(Updated_Date) %>%
                   filter(row_number()==n())
   print(my_data)
-
+  if (length(names(whole_class_LO_data)) == 0) {
+    whole_class_LO_data <- my_data %>% select(LO, running_avg)
+  }
+  else {
+    whole_class_LO_data <- rbind(whole_class_LO_data, my_data %>% select(LO, running_avg))
+  }
   name_string <- paste('scores_data_chart_student', toString(i), sep="")
-  list_LO_score_student[[name_string]] <- plotting_LO_avg(my_data, student_name, 'LO',course_avg)
+  list_LO_score_student[[name_string]] <- plotting_LO_avg(my_data, student_name, 'LO', 'Average LO score', course_avg)
 }
+whole_class_LO_data <- ddply(whole_class_LO_data, .(LO), summarise, 
+                             avg_data = mean(running_avg),
+                             min_data = min(running_avg),
+                             max_data = max(running_avg))
+whole_class_LO_data <- whole_class_LO_data %>% arrange(LO)
+whole_class_LO_data$low <- whole_class_LO_data$avg_data - whole_class_LO_data$min_data
+whole_class_LO_data$high <- whole_class_LO_data$max_data - whole_class_LO_data$avg_data
+whole_class_LO_data$x <- whole_class_LO_data$LO
+print(whole_class_LO_data)
+# graph 
+whole_class_LO <- highchart() %>% 
+  hc_chart(type = "bar") %>% 
+  hc_add_series(whole_class_LO_data, "errorbar", hcaes(x = x, low = min_data, high = max_data)) %>%
+  hc_add_series(whole_class_LO_data, hcaes(x=x, y=avg_data), type="scatter", name="Mean", color="black") %>% 
+  hc_xAxis(type='category') %>%
+  hc_title(
+    text = 'Range of LO average of a student' 
+  ) %>% 
+  hc_yAxis(max = 5, min=0,
+           visible=TRUE
+  ) %>%
+  hc_tooltip(
+    # headerFormat = "",
+    # pointFormat=paste('Course average: ', course_avg),
+    formatter= JS("function () {
+                  if (this.series.name == 'Mean'){
+                  return this.point.LO.concat('<br/><b>Mean</b>: ', parseFloat(this.point.y).toFixed(2), '<br/><b>Range</b>: [', parseFloat(this.point.min_data).toFixed(2), ', ', parseFloat(this.point.max_data).toFixed(2), ']');
+                  }}")
+  )
 
 ############## COMPUTING CO ################
 
 list_of_students <- unique(data$Student_Name)
 num_students <- length(list_of_students)
 list_CO_score_student = list()
-
+unique_COs <- unique(data[!is.na(my_data$LO), ]$CO)
+whole_class_CO_data <- data.frame()
 for (i in 1:num_students) {
   student_name = list_of_students[i]
   my_data <- data[data$Student_Name == student_name,]
@@ -417,33 +478,143 @@ for (i in 1:num_students) {
   course_avg <- compute_course_avg(my_data)
   print(course_avg)
   my_data <- calculate_LO_avg(my_data, 'CO')
+  # get the last row of each CO
   my_data <- my_data %>%
     group_by(CO) %>%
     arrange(Updated_Date) %>%
     filter(row_number()==n())
-  
-  # print(my_data)
+  if (length(names(whole_class_CO_data)) == 0) {
+    whole_class_CO_data <- my_data %>% select(CO, running_avg)
+  }
+  else {
+    whole_class_CO_data <- rbind(whole_class_CO_data, my_data %>% select(CO, running_avg))
+  }
   name_string <- paste('scores_data_chart_student', toString(i), sep="")
-  list_CO_score_student[[name_string]] <- plotting_LO_avg(my_data, student_name, 'CO', course_avg)
+  list_CO_score_student[[name_string]] <- plotting_LO_avg(my_data, student_name, 'CO', 'Average CO score', course_avg)
 }
+
+print(whole_class_CO_data)
+whole_class_CO_data <- ddply(whole_class_CO_data, .(CO), summarise, 
+                                  avg_data = mean(running_avg),
+                                  min_data = min(running_avg),
+                                  max_data = max(running_avg))
+whole_class_CO_data <- whole_class_CO_data %>% arrange(CO)
+whole_class_CO_data$low <- whole_class_CO_data$avg_data - whole_class_CO_data$min_data
+whole_class_CO_data$high <- whole_class_CO_data$max_data - whole_class_CO_data$avg_data
+whole_class_CO_data$x <- whole_class_CO_data$CO
+print(whole_class_CO_data)
+# graph 
+whole_class_CO <- highchart() %>% 
+  hc_chart(type = "bar") %>% 
+  hc_add_series(whole_class_CO_data, "errorbar", hcaes(x = x, low = min_data, high = max_data)) %>%
+  hc_add_series(whole_class_CO_data, hcaes(x=x, y=avg_data), type="scatter", name="Mean", color="black") %>% 
+  hc_xAxis(type='category') %>%
+  hc_title(
+    text = 'Range of CO score of a student' 
+  ) %>% 
+  hc_yAxis(max = 5, min=0,
+           visible=TRUE
+  ) %>%
+  hc_tooltip(
+    # headerFormat = "",
+    # pointFormat=paste('Course average: ', course_avg),
+    formatter= JS("function () {
+                  if (this.series.name == 'Mean'){
+                  return this.point.CO.concat('<br/><b>Mean</b>: ', parseFloat(this.point.y).toFixed(2), '<br/><b>Range</b>: [', parseFloat(this.point.min_data).toFixed(2), ', ', parseFloat(this.point.max_data).toFixed(2), ']');
+                  }}")
+  )
 
 
 ################### COMPUTING CONTRIBUTION OF EACH LO TO OVERALL COURSE GRADE #####
 #################################################################################
-# list_of_students <- unique(data$Student_Name)
-# num_students <- length(list_of_students)
-# list_CO_contrib_student = list()
+list_of_students <- unique(data$Student_Name)
+num_students <- length(list_of_students)
+list_CO_contrib_student = list()
+unique_LOs <- unique(data[!is.na(my_data$LO), ]$LO)
+whole_class_contrib_data <- data.frame()
+for (i in 1:num_students) {
+  student_name = list_of_students[i]
+  my_data <- data[data$Student_Name == student_name,]
+
+  my_data <- my_data[!is.na(my_data$LO), ]
+  my_data$Student_Name <- factor(my_data$Student_Name)
+  course_avg <- compute_course_avg(my_data)
+  LO_data <- calculate_LO_avg(my_data, 'LO')
+  # adter running the block below,
+  # LO_data contains all LOs, each with tot_weights and weighted_sum.
+  LO_data <- LO_data %>%
+    group_by(LO) %>%
+    arrange(Updated_Date) %>%
+    filter(row_number()==n())
+  CO_avg_data <- calculate_LO_avg(my_data, 'CO')
+  # get the last row of each CO
+  CO_avg_data <- CO_avg_data %>%
+    group_by(CO) %>%
+    arrange(Updated_Date) %>%
+    filter(row_number()==n())
+  CO_avg_data <- CO_avg_data %>% 
+    select(CO, cum_tot_weights, running_avg)  
+  names(CO_avg_data)[names(CO_avg_data) == "running_avg"] <- "CO_avg"
+  names(CO_avg_data)[names(CO_avg_data) == "cum_tot_weights"] <- "CO_tot_weights"
+  # if (i==1) {print(LO_data)}
+  num_CO <- length(unique(CO_avg_data$CO))
+  CO_num_data <- ddply(LO_data, .(CO), summarise,
+                       N=length(LO))
+  CO_data <- merge(x=CO_avg_data, y=CO_num_data, by="CO", all=TRUE)
+  LO_contrib_data <- merge(x=LO_data, y=CO_data, by="CO", all=TRUE)
+  LO_contrib_data$contrib <- LO_contrib_data$cum_sum_weighted/(num_CO*LO_contrib_data$CO_tot_weights*course_avg)
+  if (length(names(whole_class_contrib_data)) == 0) {
+    whole_class_contrib_data <- LO_contrib_data %>% select(LO, contrib)
+  }
+  else {
+    whole_class_contrib_data <- rbind(whole_class_contrib_data, LO_contrib_data %>% select(LO, contrib))
+  }
+  if (i==1){
+  print(CO_num_data)
+  print(CO_avg_data)
+  print(CO_data)
+  print(LO_contrib_data)
+  }
+  # sanity check: all should print 1 
+  print(sum(LO_contrib_data$contrib))
+  
+  name_string <- paste('scores_data_chart_student', toString(i), sep="")
+  list_CO_contrib_student[[name_string]] <- plotting_LO_avg(data=LO_contrib_data, student_name=student_name, col_name ='LO', plot_title='Contribution of each LO to course grade',course_avg=0, y_col='contrib', min_y=0, max_y=1)
+
+}
+
+# get mean and range of contrib for the whole class for each LO
+whole_class_contrib_data <- ddply(whole_class_contrib_data, .(LO), summarise, 
+      avg_contrib = mean(contrib),
+      min_contrib = min(contrib),
+      max_contrib = max(contrib))
+whole_class_contrib_data <- whole_class_contrib_data %>% arrange(LO)
+whole_class_contrib_data$low <- whole_class_contrib_data$avg_contrib - whole_class_contrib_data$min_contrib
+whole_class_contrib_data$high <- whole_class_contrib_data$max_contrib - whole_class_contrib_data$avg_contrib 
+whole_class_contrib_data$x <- whole_class_contrib_data$LO
+# graph 
+whole_class_contrib <- highchart() %>% 
+  hc_chart(type = "bar") %>% 
+  hc_add_series(whole_class_contrib_data, "errorbar", hcaes(x = x, low = min_contrib, high = max_contrib)) %>%
+  hc_add_series(whole_class_contrib_data, hcaes(x=x, y=avg_contrib), type="scatter", name="Mean", color="black") %>% 
+  hc_xAxis(type='category') %>%
+  hc_title(
+    text = 'Range of contribution of each LO to course grade of a student' 
+  ) %>% 
+  hc_yAxis(max = 1, min=0,
+           visible=TRUE
+  ) %>%
+  hc_tooltip(
+    # headerFormat = "",
+    # pointFormat=paste('Course average: ', course_avg),
+    formatter= JS("function () {
+                  if (this.series.name == 'Mean'){
+                  return this.point.LO.concat('<br/><b>Mean</b>: ', parseFloat(this.point.y).toFixed(2), '<br/><b>Range</b>: [', parseFloat(this.point.min_contrib).toFixed(2), ', ', parseFloat(this.point.max_contrib).toFixed(2), ']');
+                  }}")
+    )
+
 # 
-# for (i in 1:num_students) {
-#   student_name = list_of_students[i]
-#   my_data <- data[data$Student_Name == student_name,]
-#   
-#   my_data <- my_data[!is.na(my_data$LO), ]
-#   my_data$Student_Name <- factor(my_data$Student_Name)
-#   
-#   
-#   
-#   
+# 
 #   course_avg <- compute_course_avg(my_data)
 #   print(course_avg)
 #   my_data <- calculate_LO_avg(my_data, 'CO')
@@ -451,13 +622,13 @@ for (i in 1:num_students) {
 #     group_by(CO) %>%
 #     arrange(Updated_Date) %>%
 #     filter(row_number()==n())
-#   
+# 
 #   # print(my_data)
 #   name_string <- paste('scores_data_chart_student', toString(i), sep="")
 #   list_CO_contrib_student[[name_string]] <- plotting_LO_avg(my_data, student_name, 'CO', course_avg)
 # }
-
-
+# 
+# 
 
 
 
@@ -611,283 +782,50 @@ for (i in 1:num_students) {
   list_scores_data_chart_student[[name_string]]<- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
   list_scores_data_chart_student_CO[[name_string]] <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
 }
-# 
-# ##############student1
-# 
-# # 
-# # test_func <- function() {
-# #   for (i in 1:num_students) {
-# #     student_name = list_of_students[i]
-# #     
-# #     my_data <- data[data$Student_Name == student_name,]
-# #     
-# #     my_data <- my_data[!is.na(my_data$LO), ]
-# #     my_data$Student_Name <- factor(my_data$Student_Name)
-# #     dim(my_data)
-# #     
-# #     n_LOs <- length(unique(my_data$LO))
-# #     
-# #     n_COs <- length(unique(my_data$Course_Objective))
-# #     
-# #     
-# #     my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-# #                         average_grade = mean(Score))
-# #     
-# #     my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-# #                         average_grade = mean(Score))
-# #     
-# #     plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# #     
-# #     
-# #   }
-# # }
-# # scores_data_chart_students <- test_func()
-# 
-# 
-# student_name = list_of_students[1]
-# 
-# my_data <- data[data$Student_Name == student_name,]
-# 
-# my_data <- my_data[!is.na(my_data$LO), ]
-# my_data$Student_Name <- factor(my_data$Student_Name)
-# dim(my_data)
-# 
-# n_LOs <- length(unique(my_data$LO))
-# 
-# n_COs <- length(unique(my_data$Course_Objective))
-# 
-# 
-# my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-#                      average_grade = mean(Score))
-# 
-# my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-#                                       average_grade = mean(Score))
-# 
-# scores_data_chart_student1 <- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# scores_data_chart_student1_CO <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
-# 
-# ##############student2
-# student_name = list_of_students[2]
-# 
-# my_data <- data[data$Student_Name == student_name,]
-# 
-# my_data <- my_data[!is.na(my_data$LO), ]
-# my_data$Student_Name <- factor(my_data$Student_Name)
-# dim(my_data)
-# 
-# n_LOs <- length(unique(my_data$LO))
-# 
-# my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-#                     average_grade = mean(Score))
-# 
-# my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-#                     average_grade = mean(Score))
-# 
-# scores_data_chart_student2 <- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# scores_data_chart_student2_CO <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
-# 
-# ##############student3
-# student_name = list_of_students[3]
-# 
-# my_data <- data[data$Student_Name == student_name,]
-# 
-# my_data <- my_data[!is.na(my_data$LO), ]
-# my_data$Student_Name <- factor(my_data$Student_Name)
-# dim(my_data)
-# 
-# n_LOs <- length(unique(my_data$LO))
-# 
-# 
-# 
-# 
-# my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-#                     average_grade = mean(Score))
-# 
-# my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-#                     average_grade = mean(Score))
-# 
-# scores_data_chart_student3 <- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# scores_data_chart_student3_CO <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
-# 
-# 
-# ##############student4
-# student_name = list_of_students[4]
-# 
-# my_data <- data[data$Student_Name == student_name,]
-# 
-# my_data <- my_data[!is.na(my_data$LO), ]
-# my_data$Student_Name <- factor(my_data$Student_Name)
-# dim(my_data)
-# 
-# n_LOs <- length(unique(my_data$LO))
-# 
-# 
-# 
-# 
-# my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-#                     average_grade = mean(Score))
-# 
-# my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-#                     average_grade = mean(Score))
-# 
-# scores_data_chart_student4 <- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# scores_data_chart_student4_CO <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
-# 
-# 
-# ##############student5
-# student_name = list_of_students[5]
-# 
-# my_data <- data[data$Student_Name == student_name,]
-# 
-# my_data <- my_data[!is.na(my_data$LO), ]
-# my_data$Student_Name <- factor(my_data$Student_Name)
-# dim(my_data)
-# 
-# n_LOs <- length(unique(my_data$LO))
-# 
-# 
-# 
-# my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-#                     average_grade = mean(Score))
-# 
-# my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-#                     average_grade = mean(Score))
-# 
-# scores_data_chart_student5 <- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# scores_data_chart_student5_CO <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
-# 
-# 
-# ##############student6
-# student_name = list_of_students[6]
-# 
-# my_data <- data[data$Student_Name == student_name,]
-# 
-# my_data <- my_data[!is.na(my_data$LO), ]
-# my_data$Student_Name <- factor(my_data$Student_Name)
-# dim(my_data)
-# 
-# n_LOs <- length(unique(my_data$LO))
-# 
-# 
-# 
-# my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-#                     average_grade = mean(Score))
-# 
-# my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-#                     average_grade = mean(Score))
-# 
-# scores_data_chart_student6 <- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# scores_data_chart_student6_CO <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
-# 
-# 
-# 
-# ##############student7
-# student_name = list_of_students[7]
-# 
-# my_data <- data[data$Student_Name == student_name,]
-# 
-# my_data <- my_data[!is.na(my_data$LO), ]
-# my_data$Student_Name <- factor(my_data$Student_Name)
-# dim(my_data)
-# 
-# n_LOs <- length(unique(my_data$LO))
-# 
-# 
-# 
-# my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-#                     average_grade = mean(Score))
-# 
-# my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-#                     average_grade = mean(Score))
-# 
-# scores_data_chart_student7 <- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# scores_data_chart_student7_CO <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores") 
-# 
-# ##############student8
-# student_name = list_of_students[8]
-# 
-# my_data <- data[data$Student_Name == student_name,]
-# 
-# my_data <- my_data[!is.na(my_data$LO), ]
-# my_data$Student_Name <- factor(my_data$Student_Name)
-# dim(my_data)
-# 
-# n_LOs <- length(unique(my_data$LO))
-# 
-# 
-# 
-# my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-#                     average_grade = mean(Score))
-# 
-# my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-#                     average_grade = mean(Score))
-# 
-# 
-# scores_data_chart_student8 <- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# scores_data_chart_student8_CO <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
-# 
-# ##############student9
-# student_name = list_of_students[9]
-# 
-# my_data <- data[data$Student_Name == student_name,]
-# 
-# my_data <- my_data[!is.na(my_data$LO), ]
-# my_data$Student_Name <- factor(my_data$Student_Name)
-# dim(my_data)
-# 
-# n_LOs <- length(unique(my_data$LO))
-# 
-# 
-# 
-# my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-#                     average_grade = mean(Score))
-# 
-# my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-#                     average_grade = mean(Score))
-# 
-# scores_data_chart_student9 <- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# scores_data_chart_student9_CO <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
-# 
-# 
-# ##############student10
-# student_name = list_of_students[10]
-# 
-# my_data <- data[data$Student_Name == student_name,]
-# 
-# my_data <- my_data[!is.na(my_data$LO), ]
-# my_data$Student_Name <- factor(my_data$Student_Name)
-# dim(my_data)
-# 
-# n_LOs <- length(unique(my_data$LO))
-# 
-# 
-# 
-# my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-#                     average_grade = mean(Score))
-# 
-# my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-#                     average_grade = mean(Score))
-# scores_data_chart_student10 <- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# scores_data_chart_student10_CO <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
-# 
-# 
-# ##############student11
-# student_name = list_of_students[11]
-# 
-# my_data <- data[data$Student_Name == student_name,]
-# 
-# my_data <- my_data[!is.na(my_data$LO), ]
-# my_data$Student_Name <- factor(my_data$Student_Name)
-# dim(my_data)
-# 
-# n_LOs <- length(unique(my_data$LO))
-# 
-# 
-# my_data_LO <- ddply(my_data %>% arrange(Score), .(LO), summarise,
-#                     average_grade = mean(Score))
-# 
-# my_data_CO <- ddply(my_data %>% arrange(Score), .(Course_Objective), summarise,
-#                     average_grade = mean(Score))
-# 
-# scores_data_chart_student11 <- plotting_scores(my_data_LO, student_name, n_LOs, "LO", "average_grade", 'line', "Distribution of LO Scores")
-# scores_data_chart_student11_CO <- plotting_scores(my_data_CO, student_name, n_COs, "Course_Objective", "average_grade", 'line', "Distribution of CO Scores")
+#####
+n <- 3
+set.seed(123)
+
+df <- data.frame(x = c('x1','x2','x3'), base=seq_len(n) - 1) %>%
+  mutate(
+    y = 10 + base + 10 * sin(base),
+    y = round(y, 1),
+    z = (base*y) - median(base*y),
+    e = 10 * abs(rnorm(length(base))) + 2,
+    e = round(e, 1),
+    low = y - e,
+    high = y + e,
+  )
+df
+
+highchart() %>%
+  hc_chart(type = "bar") %>%
+  hc_add_series(df, "errorbar", hcaes(x = x, low = low, high = high)) %>%
+  hc_add_series(df$y, type="scatter", name="Mean") %>%
+  hc_xAxis(type='category')
+  
+# chart <- highchart() %>%
+# hc_add_series(
+#   data = data,
+#   type = 'column',
+#   hcaes(
+#     x = 'LO',
+#     y = 'running_avg'
+#     # group = 'LO'
+#   ),
+#   name = 'Average score',
+#   visible=TRUE
+# ) %>%
+#   # hc_add_series(
+#   #   data = list(
+#   #     list( y = values[1], color = vcolor[1]),
+#   #     list(y = values[2], color = vcolor[2]),
+#   #     list(y = values[3], color = vcolor[3]),
+#   #     list( y = values[4], color = vcolor[4])
+#   #   ),
+#   #   name='Data',
+#   #   type='column'
+#   # ) %>%
+#   hc_xAxis(title = list(text = "LO"),
+#            type = 'category'
+#   ) %>%

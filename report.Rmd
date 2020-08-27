@@ -3,7 +3,6 @@ title: "MSKGI Grading Report"
 author: "Raquel Ribeiro"
 always_allow_html: yes
 ---
-Hello
 
 <img src="minerva_logo.png" style="position:absolute;top:0px;right:0px;" />
 
@@ -17,16 +16,29 @@ format(Sys.time(), "%a %b %d %Y")
 ```
 
 ### CS166 - Ribeiro  {.tabset}
-#### LO average score by student
+#### LO contribution
+How much does a particular LO contribute towards the overall course grades? 
+This could help us see if there is any particular LO that weigh disporportionately in a student's course grade. This could easily happen when, for example, there is only 1 LO in a CO and that LO is only graded once with weight 1 (e.g., in-class video assessment). From these graphs we could determine if there is any LO that single handedly kills a student's grades.
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
+whole_class_contrib
+hw_grid(
+  list_CO_contrib_student,
+    ncol = 2
+)
+```
+
+#### LO average score
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+whole_class_LO
 hw_grid(
   list_LO_score_student,
     ncol = 2
 )
 ```
 
-#### CO average score by student
+#### CO average score
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
+whole_class_CO 
 hw_grid(
   list_CO_score_student,
     ncol = 2
@@ -39,32 +51,4 @@ hw_grid(
   list_LO_evolution_student,
     ncol = 2
 )
-```
-
-
-
-#### Section 
-```{r, echo = FALSE, warning = FALSE, message = FALSE}
-scores_data_chart
-```
-
-
-#### LO grades by student
-
-```{r, echo = FALSE, warning = FALSE, message = FALSE}
-hw_grid(
-  list_scores_data_chart_student,
-    ncol = 2
-)
-
-```
-
-#### CO grades by student
-
-```{r, echo = FALSE, warning = FALSE, message = FALSE}
-hw_grid(
-  list_scores_data_chart_student_CO, 
-    ncol = 2
-)
-
 ```
