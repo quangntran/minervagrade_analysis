@@ -1,6 +1,6 @@
 ---
 title: "MSKGI Grading Report"
-author: "Raquel Ribeiro"
+author: "Raquel Ribeiro and Quang Tran"
 always_allow_html: yes
 ---
 
@@ -16,18 +16,7 @@ format(Sys.time(), "%a %b %d %Y")
 ```
 
 ### CS166 - Ribeiro  {.tabset}
-#### LO contribution
-How much does a particular LO contribute towards the overall course grades? 
-This could help us see if there is any particular LO that weigh disporportionately in a student's course grade. This could easily happen when, for example, there is only 1 LO in a CO and that LO is only graded once with weight 1 (e.g., in-class video assessment). From these graphs we could determine if there is any LO that single handedly kills a student's grades.
-```{r, echo = FALSE, warning = FALSE, message = FALSE}
-whole_class_contrib
-hw_grid(
-  list_CO_contrib_student,
-    ncol = 2
-)
-```
-
-#### LO average score
+#### LO average score {.tabset}
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
 whole_class_LO
 hw_grid(
@@ -45,6 +34,7 @@ hw_grid(
 )
 ```
 
+
 #### LO evolution
 ```{r, echo = FALSE, warning = FALSE, message = FALSE}
 hw_grid(
@@ -52,3 +42,24 @@ hw_grid(
     ncol = 2
 )
 ```
+
+#### LO contribution
+How much does a particular LO contribute towards the overall course grades? 
+This could help us see if there is any particular LO that weigh disporportionately in a student's course grade. 
+
+Formula for the contribution of a LO:
+$$\text{LO contribution}=\alpha\frac{\text{weighted sum of this LO's grades}}{\text{total weights for the CO this LO belongs to}}$$
+where $\alpha$ is the normalizing factor and
+$$\alpha=\frac{1}{\text{number of this course's COs}\times\text{overall course average}}$$
+
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+whole_class_contrib
+hw_grid(
+  list_CO_contrib_student,
+    ncol = 2
+)
+```
+
+
+
