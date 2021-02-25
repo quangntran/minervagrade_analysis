@@ -1,4 +1,6 @@
-## author: Raquel Ribeiro, ribeiro@minervaproject.com
+## author: 
+## Raquel Ribeiro, ribeiro@minervaproject.com
+## Quang Tran, quang.tran@minerva.kgi.edu
 
 ## questions we want to address in this report:
 ## Q1: evolution of grades by week for each student
